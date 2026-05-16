@@ -15,49 +15,54 @@
             href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap"
             rel="stylesheet"
         />
+        <link rel="stylesheet" href="css/animation.css" />
         <link rel="stylesheet" href="css/index.css" />
         <link rel="manifest" href="manifest.json" />
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+        <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     </head>
-    <body>
+    <body x-data="shalatApp" x-cloak>
         <div id="app">
-            <div id="loading-overlay" class="hidden">
+            <div id="loading-overlay" x-show="loading" x-transition.opacity>
                 <div class="spinner"></div>
                 <p>Memuat...</p>
             </div>
 
             <!-- Error UI -->
-            <div id="error-container" class="modal hidden">
+            <div id="error-container" class="modal" x-show="error.show" x-transition>
                 <div class="modal-content surface-container">
-                    <span class="material-icons-round" style="font-size: 48px; color: var(--md-sys-color-primary);">error_outline</span>
+                    <span class="material-icons-round" style="font-size: 48px; color: var(--p);">error_outline</span>
                     <h2 class="headline-small">Waduh!</h2>
-                    <p id="error-message" class="body-medium">Sepertinya ada gangguan koneksi.</p>
-                    <button id="btn-retry" class="button-filled">Coba Lagi</button>
+                    <p class="body-medium" x-text="error.msg"></p>
+                    <button @click="retryAction()" class="button-filled">Coba Lagi</button>
                 </div>
             </div>
 
             <!-- Toast Notification -->
-            <div id="toast" class="hidden">
-                <span id="toast-message"></span>
-            </div>
+            <div id="toast" x-show="toast.show" x-transition:enter="toast-enter" x-transition:leave="toast-exit" x-text="toast.msg"></div>
 
             <!-- Modal Pemilihan Lokasi Awal -->
-            <div id="onboarding-modal" class="modal hidden">
+            <div id="onboarding-modal" class="modal" x-show="modals.onboarding" x-transition>
                 <div class="modal-content surface-container">
                     <h2 class="headline-small">Pilih Lokasi</h2>
                     <p class="body-medium">Silakan pilih lokasi Anda untuk melihat jadwal shalat.</p>
                     <div class="location-selector modal-selector">
-                        <select id="modal-provinsi" class="filled-select">
+                        <select id="modal-provinsi" class="filled-select" @change="loadCities($event.target.value)" x-model="selectedProv">
                             <option value="">Pilih Provinsi</option>
+                            <template x-for="p in provinces" :key="p">
+                                <option :value="p" x-text="p"></option>
+                            </template>
                         </select>
-                        <select id="modal-kabkota" class="filled-select" disabled>
+                        <select id="modal-kabkota" class="filled-select" :disabled="!cities.length" x-model="selectedCity">
                             <option value="">Pilih Kota/Kabupaten</option>
+                            <template x-for="c in cities" :key="c">
+                                <option :value="c" x-text="c"></option>
+                            </template>
                         </select>
-                        <button id="btn-detect" class="button-tonal">
+                        <button @click="detectLocation()" class="button-tonal">
                             <span class="material-icons-round">my_location</span>
                             Deteksi Lokasi
                         </button>
-                        <button id="btn-save-location" class="button-filled" disabled>
+                        <button @click="saveLocation()" class="button-filled" :disabled="!selectedCity">
                             Simpan & Masuk
                         </button>
                     </div>
@@ -68,39 +73,38 @@
                 <div class="header-row">
                     <div class="badge-container location-badge">
                         <span class="material-icons-round">location_on</span>
-                        <span id="current-city" class="label-large">Pilih Lokasi</span>
+                        <span id="current-city" class="label-large" x-text="cityLabel || 'Pilih Lokasi'"></span>
                     </div>
                     <div class="badge-container countdown-badge">
                         <span class="material-icons-round">schedule</span>
                         <div class="countdown-text">
-                            <span id="next-prayer-name" class="label-small">---</span>
-                            <span id="countdown-timer" class="title-medium">00:00:00</span>
+                            <span id="next-prayer-name" class="label-small" x-text="nextPrayer.name || '---'"></span>
+                            <span id="countdown-timer" class="title-medium" x-text="nextPrayer.timer || '00:00:00'"></span>
                         </div>
                     </div>
-                    <button id="menu-btn" class="icon-button">
+                    <button @click="modals.settings = true" class="icon-button">
                         <span class="material-icons-round">settings</span>
                     </button>
                 </div>
             </header>
 
             <!-- Modal Pengaturan -->
-            <div id="settings-modal" class="modal hidden">
+            <div id="settings-modal" class="modal" x-show="modals.settings" @click.self="modals.settings = false" x-transition>
                 <div class="modal-content surface-container">
                     <div class="modal-header">
                         <h2 class="headline-small">Pengaturan</h2>
-                        <button id="close-settings" class="icon-button">
+                        <button @click="modals.settings = false" class="icon-button">
                             <span class="material-icons-round">close</span>
                         </button>
                     </div>
                     <div class="settings-list">
-                        <div class="setting-item" id="btn-toggle-theme">
+                        <div class="setting-item" @click="toggleTheme()">
                             <div class="setting-info">
-                                <span class="material-icons-round">palette</span>
+                                <span class="material-icons-round" x-text="theme === 'dark' ? 'light_mode' : 'dark_mode'"></span>
                                 <span class="body-large">Tema Gelap/Terang</span>
                             </div>
-                            <span class="material-icons-round" id="theme-icon-menu">dark_mode</span>
                         </div>
-                        <div class="setting-item" id="btn-change-location">
+                        <div class="setting-item" @click="changeLocation()">
                             <div class="setting-info">
                                 <span class="material-icons-round">edit_location</span>
                                 <span class="body-large">Ganti Lokasi</span>
@@ -115,55 +119,26 @@
                 <div class="surface-card main-card">
                     <div class="date-header">
                         <div id="timeNow">
-                            <span id="hari" class="display-small">---</span>
-                            <span id="date" class="body-medium">---</span>
-                            <span id="hijri" class="title-small">---</span>
+                            <span id="hari" class="display-small" x-text="today.hari || '---'"></span>
+                            <span id="date" class="body-medium" x-text="today.date || '---'"></span>
+                            <span id="hijri" class="title-small" x-text="today.hijri || '---'"></span>
                         </div>
                     </div>
-                    
+
                     <div class="schedule-list">
-                        <div class="list-item" id="row-imsak">
-                            <div class="item-content">
-                                <p class="label-medium">Imsak</p>
-                                <span id="imsak" class="title-large">--:--</span>
+                        <template x-for="(time, name, index) in schedule" :key="name">
+                            <div class="list-item" 
+                                 :id="'row-' + name"
+                                 :class="{ 'active pulse-glow': activePrayer === name }"
+                                 x-show="showSchedule"
+                                 x-transition:enter="entry-list-item"
+                                 :style="'animation-delay: ' + (index * 0.06) + 's'">
+                                <div class="item-content">
+                                    <p class="label-medium" x-text="name.charAt(0).toUpperCase() + name.slice(1)"></p>
+                                    <span class="title-large" x-text="time"></span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="list-item" id="row-subuh">
-                            <div class="item-content">
-                                <p class="label-medium">Subuh</p>
-                                <span id="subuh" class="title-large">--:--</span>
-                            </div>
-                        </div>
-                        <div class="list-item" id="row-dhuha">
-                            <div class="item-content">
-                                <p class="label-medium">Dhuha</p>
-                                <span id="dhuha" class="title-large">--:--</span>
-                            </div>
-                        </div>
-                        <div class="list-item" id="row-dzuhur">
-                            <div class="item-content">
-                                <p class="label-medium">Dzuhur</p>
-                                <span id="dzuhur" class="title-large">--:--</span>
-                            </div>
-                        </div>
-                        <div class="list-item" id="row-ashar">
-                            <div class="item-content">
-                                <p class="label-medium">Ashar</p>
-                                <span id="ashar" class="title-large">--:--</span>
-                            </div>
-                        </div>
-                        <div class="list-item" id="row-maghrib">
-                            <div class="item-content">
-                                <p class="label-medium">Maghrib</p>
-                                <span id="maghrib" class="title-large">--:--</span>
-                            </div>
-                        </div>
-                        <div class="list-item" id="row-isya">
-                            <div class="item-content">
-                                <p class="label-medium">Isya'</p>
-                                <span id="isya" class="title-large">--:--</span>
-                            </div>
-                        </div>
+                        </template>
                     </div>
                 </div>
             </main>
